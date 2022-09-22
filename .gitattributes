@@ -1,2 +1,183 @@
-# Auto detect text files and perform LF normalization
-* text=auto
+local component = require("component")
+local gpu = component.gpu
+local event = require("event")
+local term = require("term")
+local unicode = require("unicode")
+local computer = require("computer")
+number k = 1
+
+local game = false
+
+local BOMB_COUNT= 6 -- 6 мин = 40% на победу, 5 мин 47% на победу
+local BET = 3
+local attempts = 0
+
+local player = ""
+
+fieldtypes = {
+  ["clear"] = 0x98df94,
+  ["close"] = 0xd0d0d0,
+  ["bomb"] = 0xff0000, 
+  ["closebomb"] = 0xff0000,
+}
+gpu.setResolution(78,39)
+gpu.setBackground(0xe0e0e0)
+term.clear()
+gpu.setBackground(0xffffff)
+gpu.fill(3,2,74,37," ")
+gpu.setForeground(0x00a000)
+gpu.set(4,29,"      Правила игры и награды:")
+gpu.setForeground(0x000000)
+gpu.set(4,30,"ЕЩЕ НАПИШУ by GeniusPlayer")
+
+
+gpu.setBackground(0xe0e0e0)
+gpu.fill(1,27,76,1," ")
+gpu.fill(54,27,2,12," ")
+gpu.setBackground(0x90ef7e)
+gpu.fill(58,29,17,9," ")
+
+Animations = {
+  ["load"] = function()
+    for i = 1,24 do
+      drawField(i,"clear")
+      os.sleep()
+      drawField(i,"close")
+    end
+  end,
+  
+  ["reveal"] = function()
+    for i = 0,3 do
+      for j = 1,6 do
+        drawField(j+i*6,"clear")
+      end
+      os.sleep(0.1)
+      for j = 1,6 do
+        if(Fields[j+i*6]=="closebomb") then
+          drawField(j+i*6,"bomb")
+        else
+          drawField(j+i*6,"close")
+        end
+      end
+    end
+    os.sleep(1)
+    for i = 0,3 do
+      for j = 1,6 do
+        drawField(j+i*6,"clear")
+      end
+      os.sleep(0.1)
+      for j = 1,6 do
+        drawField(j+i*6,"close")
+      end
+    end
+  end,
+  ["error"] = function()
+    for i = 1, 2 do
+      gpu.setBackground(0xff0000)
+      gpu.fill(58,29,17,9," ")
+      os.sleep(0.1)
+      gpu.setBackground(0x90ef7e)
+      gpu.fill(58,29,17,9," ")
+      os.sleep(0.1)
+    end
+    gpu.set(61,33,"Начать игру")    
+  end  
+}
+
+Fields = {}
+function generateFields() 
+  Fields = {}
+  for i = 1, 24 do Fields[i] = "close" end
+  local i = 0
+  while i < BOMB_COUNT
+ do
+    local rand = math.random(1,24)
+    if(Fields[rand] ~= "closebomb") then
+      Fields[rand] = "closebomb"
+      i = i + 1
+    end    
+  end
+end
+local function endGame()
+    os.sleep(0.7)
+    animations.reveal()
+    gpu.setForeground(0xFFFFFF)
+    gpu.setBackground(0x990000)
+    gpu.fill(58, 35, 17, 3, " ")
+    gpu.set(64, 36, "Выход")
+    gpu.setBackground(0x90ef7e)
+    gpu.setForeground(0)
+    gpu.fill(58, 29, 17, 5, " ")
+    gpu.set(61, 31, "Начать игру")
+    game = false
+    casino.gameIsOver()
+end
+function getBombPos(x) return 5+((x-1)%6)*12, 3+math.floor((x-1)/6)*6 end
+function getBombId(left,top)
+  if(((left-3)%12) == 0) or (((left-4)%12) == 0) or (((top-2)%6)==0) then return 0 end
+  return (math.floor((top-3)/6)*6) + math.floor((left+7)/12)
+end
+
+local symb = string.rep(unicode.char(0xE0BF),2)
+function drawField(x,ftype)
+  gpu.setBackground(fieldtypes[ftype])
+  posx,posy = getBombPos(x)
+  gpu.fill(posx,posy,10,5," ")  
+  if(ftype == "bomb") then
+    gpu.set(posx,posy+0,symb .. "      " .. symb)
+    gpu.set(posx,posy+1,"  \\    /  ")
+    gpu.set(posx,posy+2,"    " .. symb .. "    ")
+    gpu.set(posx,posy+3,"  /    \\  ")
+    gpu.set(posx,posy+4,symb .. "      " .. symb)
+  end
+end
+
+Animations.load()
+Animations.error()
+local attempts,ending = 0,0
+while true do
+  local _,_,left,top,_,p = event.pull("touch")
+  if(left >= 58) and (left <= 75) and (top >= 29) and (top <= 38) then  
+    player = p
+      generateFields()
+gpu.setBackground(0xffa500)
+      gpu.fill(58,29,17,9," ")
+      gpu.set(61,32,"Сейчас играет")
+      gpu.set(66-math.floor(string.len(player)/2),33,player)
+attempts,ending = 5,os.time()+2160
+while attempts>0 do
+        local _,_,left2,top2,_,p = event.pull(3,"touch")
+        if(p==player) and (left2~=nil) then
+          local id = getBombId(left2,top2)
+          if(id>0) then
+            if(Fields[id] == "close") then drawField(id,"clear") Fields[id]="clear" attempts = attempts - 1
+		k = k + 1
+            end
+            if(Fields[id] == "closebomb") then drawField(id,"bomb") attempts = -1
+            end
+          end
+        end
+        if(os.time() > ending) then attempts = -1 end
+      end
+      
+      os.sleep(0.7)
+      Animations.reveal()
+      gpu.setBackground(0x90ef7e)
+      gpu.fill(58,29,17,9," ")
+      gpu.set(58,33,"   Начать игру   ")
+MsgBox(tostring (k))
+    else
+      Animations.error()
+    end
+  end
+
+if game and left >= 5 and left <= 74 and top >= 2 and top <= 25 then
+        handleFieldClick(top, left)
+    end
+
+if not game and top == 37 and left >= 5 and left <= 51 then
+        if (left - 5) % 7 < 5 then
+            bet = math.floor((left - 5) / 7) + 1
+            drawBets()
+        end
+    end
